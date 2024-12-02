@@ -1,0 +1,87 @@
+include:
+  - compose.monitoring.yml
+services:
+  frontend:
+    build:
+      context: ./frontend
+    env_file:
+      - frontend/.env
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    networks:
+      - frontend-network
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - backend/.env
+    networks:
+      - frontend-network
+      - backend-network
+    depends_on:
+      - db
+    secrets:
+      - postgres_password
+    ports:
+      - "8000:8000"
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_USER: app
+      POSTGRES_DB: app
+    secrets:
+      - postgres_password
+    networks:
+      - backend-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"  # Exposes Adminer on port 8080
+    restart: always
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    networks:
+      - backend-network
+  nginx:
+    image: 'jc21/nginx-proxy-manager:2.10.4'
+    ports:
+      - '80:80'
+      - '443:443'
+      - '8090:81'
+    environment:
+      DB_SQLITE_FILE: "/data/database.sqlite"
+    volumes:
+      - data:/data
+      - letsencrypt:/etc/letsencrypt
+      #- ./nginx/nginx.conf:/data/nginx/custom/http_top.conf
+    restart: always
+    depends_on:
+      - frontend
+      - backend
+      - adminer
+      - prometheus
+      - grafana
+    networks:
+      - frontend-network
+      - backend-network
+
+networks:
+  frontend-network:
+  backend-network:
+volumes:
+  postgres_data:
+  data:
+  letsencrypt:
+
+secrets:
+   postgres_password:
+     file: ./POSTGRES_PASSWORD.txt
+
